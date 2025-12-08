@@ -1,0 +1,24 @@
+# Configuration files
+config.js
+
+# Logs
+*.log
+logs/
+
+# Node modules (if dependencies are added)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test-output/
+
