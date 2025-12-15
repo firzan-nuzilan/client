@@ -1,17 +1,20 @@
 const CompanytecClient = require('./companytec-client');
+const CompanytecAPI = require('./api-example');
 const readline = require('readline');
 
 /**
- * Interactive test client for Companytec protocol
+ * Interactive test client for Companytec protocol with API server
  */
 
-// Configuration - modify these values for your setup
+// Configuration - uses environment variables from docker-compose or defaults
 const CONFIG = {
-    host: '127.0.0.1',  // Change to your device IP
-    port: 2001          // Change to your device port
+    host: process.env.DEVICE_HOST || '127.0.0.1',  // From DEVICE_HOST env var
+    port: parseInt(process.env.DEVICE_PORT || '2001', 10),  // From DEVICE_PORT env var
+    apiPort: parseInt(process.env.API_PORT || '3000', 10)  // From API_PORT env var
 };
 
 const client = new CompanytecClient(CONFIG.host, CONFIG.port);
+let api = null;
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -55,6 +58,11 @@ function showMenu() {
     console.log('  20. Send Custom Command');
     console.log('');
     console.log('  0.  Exit');
+    console.log('========================================');
+    if (api) {
+        console.log(`\n📡 API Server running on http://localhost:${CONFIG.apiPort}`);
+        console.log('   Example: curl http://localhost:' + CONFIG.apiPort + '/status');
+    }
     console.log('========================================\n');
 }
 
@@ -198,6 +206,9 @@ async function handleCommand(choice) {
 
             case '0':
                 console.log('\nExiting...');
+                if (api) {
+                    api.stop();
+                }
                 client.disconnect();
                 rl.close();
                 process.exit(0);
@@ -318,14 +329,28 @@ function parseTotalResponse(response) {
 }
 
 async function main() {
-    console.log('Companytec Test Client');
-    console.log('======================\n');
-    console.log(`Connecting to ${CONFIG.host}:${CONFIG.port}...`);
+    console.log('Companytec Test Client with API Server');
+    console.log('======================================\n');
+    console.log(`Connecting to device ${CONFIG.host}:${CONFIG.port}...`);
 
     try {
+        // Connect the client first
         await client.connect();
-        console.log('Connected successfully!\n');
+        console.log('Connected to device successfully!\n');
 
+        // Start API server
+        try {
+            api = new CompanytecAPI(CONFIG.host, CONFIG.port, CONFIG.apiPort);
+            await api.start();
+            console.log(`\n✅ API Server started on port ${CONFIG.apiPort}`);
+            console.log('   You can now test via API calls while using the interactive menu\n');
+        } catch (apiError) {
+            console.warn(`⚠️  Failed to start API server: ${apiError.message}`);
+            console.warn('   Continuing with interactive client only...\n');
+            api = null;
+        }
+
+        // Start interactive menu loop
         while (true) {
             showMenu();
             const choice = await askQuestion('Select option: ');
@@ -337,10 +362,34 @@ async function main() {
         }
     } catch (error) {
         console.error('Connection error:', error.message);
+        if (api) {
+            api.stop();
+        }
         rl.close();
         process.exit(1);
     }
 }
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\n\nReceived SIGINT signal...');
+    if (api) {
+        api.stop();
+    }
+    client.disconnect();
+    rl.close();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n\nReceived SIGTERM signal...');
+    if (api) {
+        api.stop();
+    }
+    client.disconnect();
+    rl.close();
+    process.exit(0);
+});
 
 // Run the interactive test client
 if (require.main === module) {
