@@ -57,14 +57,17 @@ Docker Compose will automatically load these variables.
 
 ### Network Configuration
 
-**Option 1: Bridge Network (Default)**
-- Works if your device is on the same Docker network or accessible via the host's IP
-- Use the device's actual IP address (e.g., `192.168.1.100`)
+**Host Network Mode (Default)**
+- The docker-compose.yml is configured with `network_mode: host` by default
+- This allows the container to access devices on the host network (including `127.0.0.1`)
+- **Why?** The Companytec device on port 2001 is typically on the host network, and Docker's bridge network cannot access `127.0.0.1` or the host's network directly
+- The API server will be accessible directly on the host's port (no port mapping needed)
 
-**Option 2: Host Network**
-- If your device is only accessible via `127.0.0.1` or you need direct host network access
-- Uncomment `network_mode: host` in `docker-compose.yml`
-- Comment out the `networks` section
+**Alternative: Bridge Network (if host mode doesn't work)**
+- If you need to use bridge networking, you'll need to:
+  1. Use the device's actual IP address (not `127.0.0.1`)
+  2. Ensure the device is accessible from Docker's network
+  3. Update `docker-compose.yml` to remove `network_mode: host` and add port mappings
 
 ## Running Different Services
 
@@ -98,20 +101,42 @@ command: ["node", "monitor-example.js"]
 
 ## Troubleshooting
 
-### Connection Issues
+### Socket Connection Errors
 
-1. **Device not accessible from container**:
-   - If device is on `127.0.0.1`, use `network_mode: host` in docker-compose.yml
-   - If device is on a different network, ensure Docker can reach it
+**Problem:** Getting socket errors when trying to connect to port 2001
 
-2. **Check container logs**:
+**Solution:** The docker-compose.yml is already configured with `network_mode: host` which should fix this. If you still have issues:
+
+1. **Verify device is accessible from host**:
    ```bash
-   docker-compose logs companytec-client
+   # Test from your host machine (outside Docker)
+   telnet 127.0.0.1 2001
+   # or
+   nc -zv 127.0.0.1 2001
    ```
 
-3. **Test network connectivity**:
+2. **Check if device is on a different IP**:
+   - If your device is not on `127.0.0.1`, update `DEVICE_HOST` in `.env` or docker-compose.yml
+   - Example: `DEVICE_HOST=192.168.1.100`
+
+3. **On Mac/Windows Docker Desktop**:
+   - Host networking might not work the same way
+   - Try using `host.docker.internal` instead of `127.0.0.1`:
+     ```yaml
+     environment:
+       - DEVICE_HOST=host.docker.internal
+     ```
+   - Or use the actual IP address of your device
+
+4. **Check container logs**:
    ```bash
-   docker-compose exec companytec-client ping <DEVICE_HOST>
+   docker-compose logs -f companytec-client
+   ```
+
+5. **Verify network mode**:
+   ```bash
+   docker inspect companytec-client | grep NetworkMode
+   # Should show: "NetworkMode": "host"
    ```
 
 ### Rebuilding
